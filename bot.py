@@ -4,31 +4,69 @@ import telepot
 import youtube_dl
 from random import randint
 from youtubesearchpython import SearchVideos
-
+from multiprocessing import Process
 
 bot = telepot.Bot("API_TOKEN")
+class Chat:
+	def __init__(self, chat_id, text, msg):
+		self.msg = msg
 
-def recebendoMsg(msg):
-	userInput = msg['text']
-	chat_id = msg['chat']['id']
+		self.commands = {'/start':self.start, '/music':self.music, 'error':self.error}
+		self.chat_id = chat_id
 
-	if userInput.startswith('/start'):
-		bot.sendMessage(chat_id, '🤖 Hello, '+ msg['from']['first_name'] +'!\n\n'
-			'📩 Send me:\n\n'
-			'"*/music* _song name_"  or\n'
-			'"*/music* _musician name - song name_"\n\n'
-			'to order some music. 🎶', parse_mode= 'Markdown')
+		self.command, self.body_command = self.__getCommandAndBodyOfMsg(text)
+		self.valideCommand()
+		self.answer()
+		pass
+	
+	def answer(self):
+		self.__responseCommand()
+		pass
 
-	elif userInput.startswith('/music') and userInput[6:]!='':
-		if msg['chat']['type'] == 'group':
-			if '@TLMusicDownloader_bot' in userInput:
-				userInput = userInput.replace('@TLMusicDownloader_bot', '')
-				
-		search = SearchVideos(userInput[6:], offset = 1, mode = "json", max_results = 1)
-		resultados = json.loads(search.result())
-		duration = resultados['search_result'][0]['duration'].split(':')
+	def __responseCommand(self):
+		self.commands[f'{self.command}']()
+		pass
+	
+	def valideCommand(self):
+		if self.command not in self.commands:
+			self.command = 'error'
+		pass
 
-		if int(duration[0]) < 30:
+	def __getCommandAndBodyOfMsg(self, msg):
+		split_msg = msg.split(' ')
+		
+		command = split_msg[0]
+		body = str()
+		for parse in split_msg[1:]:
+			body += parse
+
+		return command, body
+
+	def sendMessage(self, msg):
+		return bot.sendMessage(self.chat_id, msg, parse_mode='Markdown')
+		pass
+
+	def error(self):
+		self.sendMessage('‼️ Oops! Invalid command!\n'+'Try: "*/music* _song name_"\n'+'or: "*/music* _musician name - song name_"')
+		pass
+
+	## Commands
+	def start(self):
+		msg = str()
+		msg += f"🤖 Hello, {self.msg['from']['first_name']} ! \n\n"
+		msg += '📩 Send me: "*/music* _song name_"  or\n\n'
+		msg += '"*/music* _musician name - song name_" \n\n'
+		msg += "to order some music. 🎶"
+
+		self.sendMessage(msg)
+		pass
+
+	def music(self):
+		if self.body_command != '':
+
+			search = SearchVideos(self.body_command, offset = 1, mode = "json", max_results = 1)
+			resultados = json.loads(search.result())
+
 			title = resultados['search_result'][0]['title']
 			link = resultados['search_result'][0]['link']
 			#video_id = resultados['search_result'][0]['id']
@@ -46,28 +84,33 @@ def recebendoMsg(msg):
 				'prefer_ffmpeg': True
 			}
 
-			bot.sendMessage(chat_id,'🎵 '+title+'\n'+'🔗 '+link)
-			DownloadingMsg = bot.sendMessage(chat_id,'⬇️ Downloading... '
-				'\n_(this may take a while.)_', parse_mode= 'Markdown')
+			self.sendMessage(f"🎵 {title} \n🔗 {link}")#erro aqui
+			DownloadingMsg = self.sendMessage('⬇️ Downloading... '+'\n_(this may take a while.)_')
 
 			with youtube_dl.YoutubeDL(ydl_opts) as ydl:
 				info_dict = ydl.extract_info(link, download=True) 
 
-			bot.sendAudio(chat_id,audio=open(file_name,'rb'))
-			bot.deleteMessage((chat_id, DownloadingMsg['message_id']))
-			bot.sendMessage(chat_id, '✅ Sucess!')
-
+			bot.sendAudio(self.chat_id,audio=open(file_name,'rb'))
+			bot.deleteMessage((self.chat_id, DownloadingMsg['message_id']))
+			self.sendMessage( '✅ Sucess!')
 			print ("Sucess!")
 			os.remove(file_name)
+		pass
 
+def main(msg):
+	## Create New Chat
+	chat_id = msg['chat']['id']
+	## Use form to send to user DM
+	text_msg = msg['text']
+	if msg['chat']['type'] == 'group':
+		if '@Noticias123_Bot' in text_msg:
+			chat_id = msg['chat']['id']
+			text_msg = text_msg.replace('@Noticias123_Bot', '')
+			
 		else:
-			bot.sendMessage(chat_id, '‼️ *Oops! Video too long to convert!*\n'
-			'Order something 30 minutes or less.', parse_mode= 'Markdown')
+			chat_id = msg['from']['id']
+	Process(target=Chat, args=(chat_id, text_msg, msg,)).start()
+	
+	pass
 
-	else:
-		bot.sendMessage(chat_id, '‼️ *Oops! Invalid command!*\n'
-			'Try: "*/music* _song name_"\n'
-			'or: "*/music* _musician name - song name_"', parse_mode= 'Markdown')
-
-
-bot.message_loop(recebendoMsg, run_forever=True)
+bot.message_loop(main, run_forever=True)
