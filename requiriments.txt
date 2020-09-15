@@ -1,0 +1,7 @@
+telepot
+youtube-dl
+youtube-search-python
+multiprocessing
+json
+os
+random
